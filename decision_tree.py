@@ -2,6 +2,21 @@ import csv
 import numpy as np
 
 
+def read_csv(csv_file):
+    # import data -- get examples, attributes
+    with open(csv_file, 'r') as f_csv:
+        csv_reader = csv.reader(f_csv)
+
+        # get attributes
+        attributes = next(csv_reader)
+
+        # get examples
+        examples = []
+        for example in csv_reader:
+            examples.append(example)
+    return examples, attributes
+
+
 def preprocess(sample):
     pp_sample = sample.copy()
 
@@ -133,28 +148,45 @@ def forward(pp_sample, dt):
     return forward(pp_sample, sub_dt)
 
 
-# import data -- get examples, attributes
-with open("drug200.csv", 'r') as f_csv:
-    csv_reader = csv.reader(f_csv)
+def split_data(pp_examples, train_split):
+    # get num examples in train, test
+    num_train = int(train_split * len(pp_examples))
 
-    # get attributes
-    attributes = next(csv_reader)
+    # random shuffle
+    shuffled_data = pp_examples.copy()
+    np.random.shuffle(shuffled_data)
 
+    # split
+    train_data = shuffled_data[:num_train]
+    test_data = shuffled_data[num_train:]
+
+    return train_data, test_data
+
+
+def test_dt(dt, test_data):
+    num_correct = 0
+    for sample in test_data:
+        pred = forward(sample, dt)
+        if pred == sample[-1]:
+            num_correct += 1
+    acc = num_correct / len(test_data)
+    return acc
+
+
+if __name__ == "__main__":
     # get examples
-    examples = []
-    for example in csv_reader:
-        examples.append(example)
+    examples, attributes = read_csv("drug200.csv")
 
-# preprocess
-pp_examples = [preprocess(ex) for ex in examples]
+    # preprocess
+    pp_examples = [preprocess(ex) for ex in examples]
 
-# call function
-dt = decision_tree_learning(pp_examples, attributes, None)
+    # split into train, test
+    train_data, test_data = split_data(pp_examples, 0.8)
 
-# get classification for new sample
-sample = ['27', 'M', 'NORMAL', 'NORMAL', '10']
-pp_sample = preprocess(sample)
-pred = forward(pp_sample, dt)
+    # create decision tree
+    dt = decision_tree_learning(train_data, attributes, None)
 
+    # get accuracy on test_data
+    acc = test_dt(dt, test_data)
 
-print(pred)
+    print(acc)
