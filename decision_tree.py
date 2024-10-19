@@ -17,19 +17,79 @@ def read_csv(csv_file):
     return examples, attributes
 
 
-def preprocess(sample):
-    pp_sample = sample.copy()
+def get_attr_val_dict():
+    # maps attr to list of possible values
+    attr_val_dict = {
+        'Age': [
+            0,  # < 24
+            1,  # < 34
+            2,  # < 44
+            3,  # < 54
+            4,  # < 64
+            5,  # >= 65
+        ],
+        'Sex': [
+            'M',  # default
+            'F'
+        ],
+        'BP': [
+            'LOW',
+            'NORMAL',  # default
+            'HIGH'
+        ],
+        'Cholesterol': [
+            'HIGH',
+            'NORMAL'  # default
+        ],
+        'Na_to_K': [
+            0,  # < 10
+            1,  # < 15
+            2,  # < 20
+            3,  # < 30
+            4,  # < 35
+            5,  # >= 35
+        ]}
+    return attr_val_dict
 
-    # sort Age into buckets -- TODO: maximize information gained from splits
-    # age ranges from 15 - 74, let's split into 15-24, 25-34, ..., 65-74
+
+def preprocess(original_samples):
+    pp_samples = [x.copy() for x in original_samples]
+
+    # sort Age into buckets: min_age onwards in 10 year increments
     age_i = attributes.index('Age')
-    pp_sample[age_i] = (float(pp_sample[age_i]) - 15) // 10
+    for sample in pp_samples:
+        sample_age = int(sample[age_i])
+        if sample_age < 24:
+            sample[age_i] = 0
+        elif sample_age < 34:
+            sample[age_i] = 1
+        elif sample_age < 44:
+            sample[age_i] = 2
+        elif sample_age < 54:
+            sample[age_i] = 3
+        elif sample_age < 64:
+            sample[age_i] = 4
+        else:
+            sample[age_i] = 5
 
     # sort Na_to_K to buckets -- TODO: maximize information gained from splits
     na_i = attributes.index('Na_to_K')
-    pp_sample[na_i] = (float(pp_sample[na_i]) - 6.269) // 5
+    for sample in pp_samples:
+        sample_na = float(sample[na_i])
+        if sample_na < 10:
+            sample[na_i] = 0
+        elif sample_na < 15:
+            sample[na_i] = 1
+        elif sample_na < 20:
+            sample[na_i] = 2
+        elif sample_na < 25:
+            sample[na_i] = 3
+        elif sample_na < 35:
+            sample[na_i] = 4
+        else:
+            sample[na_i] = 5
 
-    return pp_sample
+    return pp_samples
 
 
 def plurality_value(examples):
@@ -104,7 +164,7 @@ class Node:
         self.children_nodes[vk] = subtree
 
 
-def decision_tree_learning(examples, attributes, parent_node):
+def decision_tree_learning(examples, attributes, parent_node, attr_val_dict):
     # base case 1: examples is empty, return plurality value of parents
     if len(examples) == 0:
         pred = plurality_value(parent_node.examples)
@@ -126,10 +186,10 @@ def decision_tree_learning(examples, attributes, parent_node):
         remaining_attrs = [a for a in attributes if a != A]
         tree = Node(parent_node, A, examples)
 
-        vk_s = list(set(ex[A_i] for ex in examples))
+        vk_s = attr_val_dict[A]
         for vk in vk_s:
             exs = [ex[:A_i] + ex[A_i+1:] for ex in examples if ex[A_i] == vk]
-            subtree = decision_tree_learning(exs, remaining_attrs, tree)
+            subtree = decision_tree_learning(exs, remaining_attrs, tree, attr_val_dict)
             tree.add_child(subtree, vk)
 
     return tree
@@ -137,7 +197,7 @@ def decision_tree_learning(examples, attributes, parent_node):
 
 def forward(pp_sample, dt):
     # base case: dt is a classification
-    if dt.is_leaf == True:
+    if dt.is_leaf is True:
         return dt.pred
 
     # otherwise, recurse down tree
@@ -173,20 +233,36 @@ def test_dt(dt, test_data):
     return acc
 
 
+def get_avg_acc(pp_examples, train_split, attributes, num_trials, attr_val_dict):
+    accs = []
+
+    for _ in range(num_trials):
+        # split into train, test
+        train_data, test_data = split_data(pp_examples, 0.8)
+
+        # create decision tree
+        dt = decision_tree_learning(train_data, attributes, None, attr_val_dict)
+
+        # get accuracy on test_data
+        acc = test_dt(dt, test_data)
+        accs.append(acc)
+
+    avg_acc = sum(accs) / num_trials
+    return avg_acc
+
+
 if __name__ == "__main__":
+
+    # maps attr to list of possible values
+    attr_val_dict = get_attr_val_dict()
+
     # get examples
     examples, attributes = read_csv("drug200.csv")
 
     # preprocess
-    pp_examples = [preprocess(ex) for ex in examples]
+    pp_examples = preprocess(examples)
 
-    # split into train, test
-    train_data, test_data = split_data(pp_examples, 0.8)
+    # get average performance for a given split
+    avg_acc = get_avg_acc(pp_examples, 0.8, attributes, 20, attr_val_dict)
 
-    # create decision tree
-    dt = decision_tree_learning(train_data, attributes, None)
-
-    # get accuracy on test_data
-    acc = test_dt(dt, test_data)
-
-    print(acc)
+    print(avg_acc)
