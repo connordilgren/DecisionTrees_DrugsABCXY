@@ -2,30 +2,19 @@ import csv
 import numpy as np
 
 
-# import data -- get examples, attributes
-with open("drug200.csv", 'r') as f_csv:
-    csv_reader = csv.reader(f_csv)
+def preprocess(sample):
+    pp_sample = sample.copy()
 
-    # get attributes
-    attributes = next(csv_reader)
+    # sort Age into buckets -- TODO: maximize information gained from splits
+    # age ranges from 15 - 74, let's split into 15-24, 25-34, ..., 65-74
+    age_i = attributes.index('Age')
+    pp_sample[age_i] = (float(pp_sample[age_i]) - 15) // 10
 
-    # get examples
-    examples = []
-    for example in csv_reader:
-        examples.append(example)
+    # sort Na_to_K to buckets -- TODO: maximize information gained from splits
+    na_i = attributes.index('Na_to_K')
+    pp_sample[na_i] = (float(pp_sample[na_i]) - 6.269) // 5
 
-
-# sort Age into buckets -- TODO: maximize information gained from splits
-# age ranges from 15 - 74, let's split into 15-24, 25-34, ..., 65-74
-age_i = attributes.index('Age')
-for example in examples:
-    example[age_i] = (float(example[age_i]) - 15) // 10
-
-
-# sort Na_to_K to buckets -- TODO: maximize information gained from splits
-na_i = attributes.index('Na_to_K')
-for example in examples:
-    example[na_i] = (float(example[na_i]) - 6.269) // 5
+    return pp_sample
 
 
 def plurality_value(examples):
@@ -88,11 +77,13 @@ def get_most_important_A(attributes, examples):
 
 
 class Node:
-    def __init__(self, parent_node, test_attr, examples):
+    def __init__(self, parent_node, test_attr, examples, is_leaf=False, pred=None):
         self.parent_node = parent_node
         self.test_attr = test_attr
         self.examples = examples
         self.children_nodes = {}
+        self.is_leaf = is_leaf
+        self.pred = pred
 
     def add_child(self, subtree, vk):
         self.children_nodes[vk] = subtree
@@ -101,15 +92,18 @@ class Node:
 def decision_tree_learning(examples, attributes, parent_node):
     # base case 1: examples is empty, return plurality value of parents
     if len(examples) == 0:
-        return plurality_value(parent_node.examples)
+        pred = plurality_value(parent_node.examples)
+        return Node(parent_node, None, examples, is_leaf=True, pred=pred)
 
     # base case 2: all examples have the same classification
     elif all_examples_have_same_labels(examples):
-        return examples[0][-1]
+        pred = examples[0][-1]
+        return Node(parent_node, None, examples, is_leaf=True, pred=pred)
 
     # base case 3: attributes is empy, return plurality value of examples
     elif len(attributes) == 1:  # last attribute is the classification
-        return plurality_value(examples)
+        pred = plurality_value(examples)
+        return Node(parent_node, None, examples, is_leaf=True, pred=pred)
 
     # expand tree
     else:
@@ -126,7 +120,41 @@ def decision_tree_learning(examples, attributes, parent_node):
     return tree
 
 
-# call function
-dt = decision_tree_learning(examples, attributes, None)
+def forward(pp_sample, dt):
+    # base case: dt is a classification
+    if dt.is_leaf == True:
+        return dt.pred
 
-print('here')
+    # otherwise, recurse down tree
+    test_attr = dt.test_attr
+    test_attr_i = attributes.index(test_attr)
+    samp_attr_v = pp_sample[test_attr_i]
+    sub_dt = dt.children_nodes[samp_attr_v]
+    return forward(pp_sample, sub_dt)
+
+
+# import data -- get examples, attributes
+with open("drug200.csv", 'r') as f_csv:
+    csv_reader = csv.reader(f_csv)
+
+    # get attributes
+    attributes = next(csv_reader)
+
+    # get examples
+    examples = []
+    for example in csv_reader:
+        examples.append(example)
+
+# preprocess
+pp_examples = [preprocess(ex) for ex in examples]
+
+# call function
+dt = decision_tree_learning(pp_examples, attributes, None)
+
+# get classification for new sample
+sample = ['27', 'M', 'NORMAL', 'NORMAL', '10']
+pp_sample = preprocess(sample)
+pred = forward(pp_sample, dt)
+
+
+print(pred)
